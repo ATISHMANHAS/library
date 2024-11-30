@@ -1,22 +1,14 @@
-class Book:
+import csv
 
-    def __init__(self,book_id,tittle,author,available_copies):
+class Book:
+    def __init__(self, book_id, title, author, available_copies):
         self.book_id = book_id
-        self.title = tittle
+        self.title = title
         self.author = author
         self.available_copies = available_copies
 
     def display_details(self):
-        print("ID: {self.book_id}, Title: {self.title}, Author: {self.author}, Available: {self.available_copies}")
-
-    def borrow_book(self):
-        if self.available_copies > 0:
-            self.available_copies -= 1
-            return True
-        return False
-
-    def return_book(self):
-        self.available_copies += 1
+        print(f"ID: {self.book_id}, Title: {self.title}, Author: {self.author}, Copies: {self.available_copies}")
 
 
 class User:
@@ -26,10 +18,20 @@ class User:
         self.borrowed_books = []
 
     def borrow_book(self, book):
-        self.borrowed_books.append(book)
+        if book.available_copies > 0:
+            self.borrowed_books.append(book)
+            book.available_copies -= 1
+            print(f"{self.name} borrowed '{book.title}'.")
+        else:
+            print(f"'{book.title}' is not available.")
 
     def return_book(self, book):
-        self.borrowed_books.remove(book)
+        if book in self.borrowed_books:
+            self.borrowed_books.remove(book)
+            book.available_copies += 1
+            print(f"{self.name} returned '{book.title}'.")
+        else:
+            print(f"{self.name} doesn't have '{book.title}'.")
 
 
 class Library:
@@ -43,40 +45,64 @@ class Library:
     def add_user(self, user):
         self.users[user.user_id] = user
 
-    def lend_book(self, user_id, book_id):
-        if book_id in self.books and user_id in self.users:
-            book = self.books[book_id]
-            user = self.users[user_id]
-            if book.borrow_book():
-                user.borrow_book(book)
-                print(f"Book '{book.title}' borrowed by {user.name}.")
-            else:
-                print("Book is not available.")
-        else:
-            print("Invalid user ID or book ID.")
+    def save_to_csv(self, books_file="books.csv", users_file="users.csv"):
+        with open(books_file, "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["Book ID", "Title", "Author", "Available Copies"])
+            for book in self.books.values():
+                writer.writerow([book.book_id, book.title, book.author, book.available_copies])
 
-    def return_book(self, user_id, book_id):
-        if book_id in self.books and user_id in self.users:
-            book = self.books[book_id]
-            user = self.users[user_id]
-            if book in user.borrowed_books:
-                book.return_book()
-                user.return_book(book)
-                print(f"Book '{book.title}' returned by {user.name}.")
-            else:
-                print("User did not borrow this book.")
-        else:
-            print("Invalid user ID or book ID.")
+        with open(users_file, "w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(["User ID", "Name", "Borrowed Books"])
+            for user in self.users.values():
+                borrowed_books_ids = ",".join(str(book.book_id) for book in user.borrowed_books)
+                writer.writerow([user.user_id, user.name, borrowed_books_ids])
 
-    def display_all_books(self):
-        for book in self.books.values():
-            book.display_details()
+        print(f"Library data saved to '{books_file}' and '{users_file}'.")
 
+    def load_from_csv(self, books_file="books.csv", users_file="users.csv"):
+        try:
+            with open(books_file, "r") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    book = Book(
+                        int(row["Book ID"]),
+                        row["Title"],
+                        row["Author"],
+                        int(row["Available Copies"]),
+                    )
+                    self.add_book(book)
 
+            with open(users_file, "r") as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    user = User(int(row["User ID"]), row["Name"])
+                    borrowed_books_ids = row["Borrowed Books"].split(",") if row["Borrowed Books"] else []
+                    for book_id in borrowed_books_ids:
+                        if int(book_id) in self.books:
+                            user.borrow_book(self.books[int(book_id)])
+                    self.add_user(user)
+
+            print(f"Library data loaded from '{books_file}' and '{users_file}'.")
+        except FileNotFoundError as e:
+            print(f"File not found: {e}. Starting fresh!")
 
 
 library = Library()
-
-library.add_book(Book(6,"One Piece","Luffy",8))
-
-library.display_all_books()
+book1 = Book(2, "God of War", "Kratos", 8)
+book2 = Book(3, "Red Dead Redemption", "Arthur Morgan", 7)
+library.add_book(book1)
+library.add_book(book2)
+user1 = User(1, "Alice")
+user2 = User(2, "Bob")
+library.add_user(user1)
+library.add_user(user2)
+user1.borrow_book(book1)
+library.save_to_csv()
+new_library = Library()
+new_library.load_from_csv()
+for book in new_library.books.values():
+    book.display_details()
+for user in new_library.users.values():
+    print(f"User {user.name} has borrowed {[b.title for b in user.borrowed_books]}")
